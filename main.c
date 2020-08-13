@@ -28,6 +28,7 @@ void _log(char *message, char *file, int line) {
 }
 
 char **str_split(char* a_str, const char a_delim, size_t *len) {
+
   char **result = 0;
   size_t count = 0;
   char* tmp = a_str;
@@ -39,10 +40,10 @@ char **str_split(char* a_str, const char a_delim, size_t *len) {
   /* Count how many elements will be extracted. */
   while (*tmp) {
     if (a_delim == *tmp) {
-      count++;
+      count += 1;
       last_comma = tmp;
     }
-    tmp++;
+    tmp += 1;
   }
 
   /* Add space for trailing token. */
@@ -52,7 +53,7 @@ char **str_split(char* a_str, const char a_delim, size_t *len) {
 
   /* Add space for terminating null string so caller
       knows where the list of returned strings ends. */
-  count++;
+  count += 1;
 
   result = malloc(sizeof(char*) * count);
 
@@ -70,6 +71,16 @@ char **str_split(char* a_str, const char a_delim, size_t *len) {
   }
 
   return result;
+}
+
+char *str_clone(char *str) {
+  size_t len = strlen(str);
+
+  char *new_str = (char *) malloc(sizeof(char *) * len);
+
+  strcpy(new_str, str);
+
+  return new_str;
 }
 
 char **file_to_lines(char *filename, int *lines_len) {
@@ -103,7 +114,7 @@ char **file_to_lines(char *filename, int *lines_len) {
   return lines;
 }
 
-typedef struct csv_desc {
+typedef struct file_desc {
   char *filename;
 
   char **cols;
@@ -113,10 +124,10 @@ typedef struct csv_desc {
   char **rows;
   int r_counter;
 
-} csv_desc;
+} file_desc;
 
-csv_desc new_csv_desc(char *filename) {
-  csv_desc desc;
+file_desc new_file_desc(char *filename) {
+  file_desc desc;
   desc.filename = filename;
 
   desc.c_counter = 0;
@@ -129,7 +140,21 @@ csv_desc new_csv_desc(char *filename) {
   return desc;
 }
 
-void _add_col(csv_desc *desc, char *col, char *type) {
+void _add_row(file_desc *desc, char *row) {
+  if (desc->rows == NULL) {
+    desc->rows = (char **) malloc(sizeof(char **));
+  } else {
+    desc->rows = (char **) realloc(desc->rows, sizeof(char **) * desc->r_counter + 1);
+  }
+
+  desc->rows[desc->r_counter] = str_clone(row);
+
+  desc->r_counter += 1;
+}
+
+void _add_col(file_desc *desc, char *col, char *type) {
+  if (type == NULL) return;
+
   if (desc->cols == NULL) {
     desc->cols = (char **) malloc(sizeof(char **));
     desc->types = (char **) malloc(sizeof(char **));
@@ -138,51 +163,39 @@ void _add_col(csv_desc *desc, char *col, char *type) {
     desc->types = (char **) realloc(desc->types, sizeof(char **) * desc->c_counter + 1);
   }
 
-  desc->cols[desc->c_counter] = col;
-  desc->types[desc->c_counter] = type;
+  desc->cols[desc->c_counter] = str_clone(col);
+  desc->types[desc->c_counter] = str_clone(type);
 
   desc->c_counter += 1;
 }
 
-void _add_row(csv_desc *desc, char *row) {
-  if (desc->rows == NULL) {
-    desc->rows = (char **) malloc(sizeof(char **));
-  } else {
-    desc->rows = (char **) realloc(desc->rows, sizeof(char **) * desc->r_counter + 1);
-  }
-
-  desc->rows[desc->r_counter] = row;
-
-  desc->r_counter += 1;
-}
-
-void add_col(csv_desc *desc, char *col_type) {
+void add_col(file_desc *desc, char *col_type) {
   char **extract = str_split(col_type, ':', NULL);
   _add_col(desc, extract[0], extract[1]);
 }
 
-void print_cols(csv_desc desc) {
+void print_cols(file_desc desc) {
   for (int i = 0; i < desc.c_counter; i += 1) {
     printf("%s:%s\n", desc.cols[i], desc.types[i]);
   }
 }
 
-void print_rows(csv_desc desc) {
+void print_rows(file_desc desc) {
   for (int i = 0; i < desc.r_counter; i += 1) {
-    printf("%s", desc.rows[i]);
+    printf("%d -> %s", i, desc.rows[i]);
   }
 }
 
-csv_desc describe_file(char *filename) {
+file_desc describe_file(char *filename) {
   int lines_counter = 0;
   char **lines = file_to_lines(filename, &lines_counter);
 
-  char *f_line = lines[0];
+  char *header = lines[0];
 
   size_t c_counter;
-  char **col_types = str_split(f_line, ';', &c_counter);
+  char **col_types = str_split(header, ';', &c_counter);
 
-  csv_desc desc = new_csv_desc(filename);
+  file_desc desc = new_file_desc(filename);
 
   for(int i = 0; i < c_counter; i += 1) {
     add_col(&desc, col_types[i]);
@@ -195,11 +208,13 @@ csv_desc describe_file(char *filename) {
   return desc;
 }
 
-char **get_row(csv_desc desc, char *col, char *val) {
+char **get_row(file_desc desc, char *col, char *val) {
   int col_id = find_id(col, desc.cols, desc.c_counter);
 
   for (int i = 0; i < desc.r_counter; i += 1) {
-    char **row = str_split(desc.rows[i], ';', NULL);
+    char *str_row = str_clone(desc.rows[i]);
+    char **row = str_split(str_row, ';', NULL);
+
     if (strcmp(row[col_id], val) == 0) return row;
   }
 
@@ -211,11 +226,15 @@ typedef struct pessoa {
   char *nome;
 } pessoa;
 
-pessoa get_pessoa(csv_desc desc, int id) {
-  if (strcmp(desc.filename, "pessoa.csv") != 0) {
-    _log("csv_desc fornecido inválido", __FILE__, __LINE__);
+void check_filename(file_desc desc, char *expected, char *file, int line) {
+    if (strcmp(desc.filename, expected) != 0) {
+    _log("file_desc fornecido inválido", file, line);
     exit(0);
   }
+}
+
+pessoa get_pessoa(file_desc desc, int id) {
+  check_filename(desc, "pessoa.csv", __FILE__, __LINE__);
 
   char str_id[100];
   sprintf(str_id, "%d", id);
@@ -232,11 +251,15 @@ pessoa get_pessoa(csv_desc desc, int id) {
 }
 
 int main() {
-  csv_desc desc = describe_file("pessoa.csv");
+  file_desc desc = describe_file("pessoa.csv");
 
   pessoa p = get_pessoa(desc, 1);
 
-  printf("%d, %s\n", p.id, p.nome);
+  // printf("%d\n", desc.r_counter);
+
+  print_rows(desc);
+
+  // printf("%d, %s\n", p.id, p.nome);
 
   return 0;
 }
