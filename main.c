@@ -13,6 +13,24 @@ int find_id(char *str, char **strs, int strs_len) {
   return -1;
 }
 
+int count_digits(int num) {
+  int count = 0;
+
+  do {
+    count += 1;
+    num /= 10;
+  } while (num != 0);
+
+  return count;
+}
+
+char *itoa(int num) {
+  char *str = (char *) malloc(sizeof(char *) * count_digits(num));
+  sprintf(str, "%d", num);
+
+  return str;
+}
+
 char* concat(const char *s1, const char *s2) {
     const size_t len1 = strlen(s1);
     const size_t len2 = strlen(s2);
@@ -221,11 +239,6 @@ char **get_row(file_desc desc, char *col, char *val) {
   return NULL;
 }
 
-typedef struct pessoa {
-  int id;
-  char *nome;
-} pessoa;
-
 void check_filename(file_desc desc, char *expected, char *file, int line) {
     if (strcmp(desc.filename, expected) != 0) {
     _log("file_desc fornecido inválido", file, line);
@@ -233,12 +246,15 @@ void check_filename(file_desc desc, char *expected, char *file, int line) {
   }
 }
 
+typedef struct pessoa {
+  int id;
+  char *nome;
+} pessoa;
+
 pessoa get_pessoa(file_desc desc, int id) {
   check_filename(desc, "pessoa.csv", __FILE__, __LINE__);
 
-  char str_id[100];
-  sprintf(str_id, "%d", id);
-  char **row = get_row(desc, "id", str_id);
+  char **row = get_row(desc, "id", itoa(id));
 
   pessoa p;
 
@@ -259,7 +275,7 @@ int main() {
 
   print_rows(desc);
 
-  // printf("%d, %s\n", p.id, p.nome);
+  printf("%d, %s\n", p.id, p.nome);
 
   return 0;
 }
